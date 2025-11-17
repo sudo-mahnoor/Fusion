@@ -2,11 +2,12 @@ name: Odoo Modules CI/CD Pipeline
 
 on:
   push:
-    branches: [ staging ]
+    branches: [ staging, main ]
 
 jobs:
   validate:
     runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/staging'
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -23,9 +24,8 @@ jobs:
         echo "✅ All Python files are syntactically correct"
 
   deploy:
-    needs: validate
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     
     steps:
     - name: Deploy to Production Server
@@ -39,8 +39,8 @@ jobs:
           echo "🚀 Starting deployment to production server..."
           cd /root/addons/Fusion
           git fetch origin
-          git checkout staging
-          git pull origin staging
+          git checkout main
+          git pull origin main
           chmod +x deploy.sh
           ./deploy.sh
           echo "✅ Deployment completed successfully!"
