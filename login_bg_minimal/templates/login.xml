@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <template id="login" inherit_id="web.login_layout" name="Login Background">
+        <xpath expr="//body" position="attributes">
+            <attribute name="class" add="login-position-center" separator=" "/>
+        </xpath>
+    </template>
+</odoo>
