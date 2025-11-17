@@ -2,12 +2,13 @@ name: Odoo Modules CI/CD Pipeline
 
 on:
   push:
-    branches: [ staging, main ]
+    branches: [ staging ]
+  pull_request:
+    branches: [ staging ]
 
 jobs:
   validate:
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/staging'
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -24,10 +25,28 @@ jobs:
         echo "✅ All Python files are syntactically correct"
 
   deploy:
+    needs: validate
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
     
     steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Configure Git
+      run: |
+        git config --global user.name "GitHub Actions Bot"
+        git config --global user.email "actions@github.com"
+
+    - name: Merge staging to main
+      run: |
+        git checkout main
+        git merge staging --no-ff -m "🚀 Auto-deploy: Merge staging to main [skip ci]"
+        git push origin main
+
     - name: Deploy to Production Server
       uses: appleboy/ssh-action@v1.0.3
       with:
@@ -38,9 +57,12 @@ jobs:
         script: |
           echo "🚀 Starting deployment to production server..."
           cd /root/addons/Fusion
-          git fetch origin
-          git checkout main
-          git pull origin main
           chmod +x deploy.sh
           ./deploy.sh
           echo "✅ Deployment completed successfully!"
+
+    - name: Create deployment tag
+      run: |
+        TAG_NAME="deploy-$(date +'%Y%m%d-%H%M%S')"
+        git tag -a $TAG_NAME -m "Production deployment $TAG_NAME"
+        git push origin $TAG_NAME
