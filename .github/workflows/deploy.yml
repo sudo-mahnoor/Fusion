@@ -1,0 +1,101 @@
+name: Odoo Modules CI/CD Pipeline
+
+on:
+  push:
+    branches: [ staging ]
+  pull_request:
+    branches: [ staging ]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+
+    - name: Validate Odoo modules
+      run: |
+        # Check for manifest files
+        find . -name "__manifest__.py" -exec python -m py_compile {} \;
+        
+        # Check for Python syntax errors
+        find . -name "*.py" -exec python -m py_compile {} \;
+        
+        echo "✅ All Python files are syntactically correct"
+
+    - name: Check for required files
+      run: |
+        # Ensure each module has required files
+        for dir in */; do
+          if [ -f "$dir/__manifest__.py" ]; then
+            echo "✅ Module $dir has manifest file"
+            if [ ! -f "$dir/__init__.py" ]; then
+              echo "⚠️  Warning: Module $dir missing __init__.py"
+            fi
+          fi
+        done
+
+  deploy:
+    needs: validate
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/staging' && github.event_name == 'push'
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        token: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Configure Git
+      run: |
+        git config --global user.name "GitHub Actions Bot"
+        git config --global user.email "actions@github.com"
+
+    - name: Merge staging to main
+      run: |
+        git checkout main
+        git merge staging --no-ff -m "🚀 Auto-deploy: Merge staging to main [skip ci]"
+        git push origin main
+
+    - name: Deploy to Production Server
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.PROD_HOST }}
+        username: ${{ secrets.PROD_USER }}
+        key: ${{ secrets.PROD_SSH_KEY }}
+        port: ${{ secrets.PROD_PORT }}
+        script: |
+          echo "🚀 Starting deployment to production server..."
+          
+          # Run the deployment script
+          cd /root/addons/Fusion
+          chmod +x deploy.sh
+          ./deploy.sh
+          
+          echo "✅ Deployment completed successfully!"
+
+    - name: Create deployment tag
+      run: |
+        TAG_NAME="deploy-$(date +'%Y%m%d-%H%M%S')"
+        git tag -a $TAG_NAME -m "Production deployment $TAG_NAME"
+        git push origin $TAG_NAME
+
+    - name: Notify on success
+      if: success()
+      run: |
+        echo "✅ Deployment successful!"
+        echo "Repository: ${{ github.repository }}"
+        echo "Commit: ${{ github.sha }}"
+        echo "Deployed at: $(date)"
+
+    - name: Notify on failure
+      if: failure()
+      run: |
+        echo "❌ Deployment failed!"
+        echo "Please check the logs and fix the issues."
